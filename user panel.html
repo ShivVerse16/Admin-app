@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crystal Admin - Users</title>
+    
+    <!-- Google Fonts: Plus Jakarta Sans (Crystal Admin Theme) -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Supabase SDK -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans:['Plus Jakarta Sans', 'sans-serif'] },
+                    colors: { brand: '#4f46e5', bg: '#f8fafc', surface: '#ffffff' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background-color: #f8fafc; 
+            color: #334155; 
+            padding-bottom: 90px; 
+        }
+        .input-box { 
+            width: 100%; 
+            background: #f1f5f9; 
+            border: 2px solid transparent; 
+            padding: 12px 16px; 
+            border-radius: 12px; 
+            font-weight: 500; 
+            font-size: 14px; 
+            outline: none; 
+            transition: 0.2s ease;
+        }
+        .input-box:focus { 
+            background: white; 
+            border-color: #4f46e5; 
+        }
+        .btn-scale { transition: transform 0.1s ease; cursor: pointer; }
+        .btn-scale:active { transform: scale(0.95); }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+<div id="app">
+
+    <!-- HEADER (Crystal Admin Pro Theme) -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-3 md:px-8 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-brand rounded-xl flex items-center justify-center text-white shadow-sm shrink-0">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-slate-800 text-lg leading-tight">Crystal Users</h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="w-2 h-2 rounded-full" :class="isConnected ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500'"></span>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{{ isConnected ? 'Systems Connected' : 'Connecting...' }}</p>
+                    </div>
+                </div>
+            </div>
+            <button @click="fetchUsers" class="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 h-10 w-10 rounded-xl flex items-center justify-center transition btn-scale">
+                <i class="fa-solid fa-rotate-right" :class="{'fa-spin text-brand': loading}"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 py-6 md:px-8 space-y-6">
+
+        <!-- ERROR BANNER -->
+        <div v-if="errorMsg" class="bg-red-50 border border-red-200 text-red-600 p-4 rounded-2xl flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation mt-1 text-red-500"></i>
+            <div>
+                <h3 class="font-bold text-sm">System Error</h3>
+                <p class="text-xs opacity-80">{{ errorMsg }}</p>
+            </div>
+        </div>
+
+        <!-- TRIAL SETTINGS & STATS -->
+        <section class="grid grid-cols-1 xl:grid-cols-[auto_1fr] gap-6">
+            
+            <!-- Trial Config -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-center">
+                <div class="text-slate-400 text-xs uppercase tracking-widest font-bold mb-3">New User Trial Limit</div>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
+                        <input type="number" v-model="trialSettings.days" min="0" class="w-14 bg-transparent text-center text-sm font-bold text-slate-700 outline-none py-2">
+                        <span class="text-xs text-slate-400 pr-3 font-bold">Days</span>
+                    </div>
+                    <div class="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
+                        <input type="number" v-model="trialSettings.hours" min="0" max="23" class="w-14 bg-transparent text-center text-sm font-bold text-slate-700 outline-none py-2">
+                        <span class="text-xs text-slate-400 pr-3 font-bold">Hrs</span>
+                    </div>
+                    <button @click="updateSettings" class="h-11 w-11 rounded-xl bg-brand text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:bg-indigo-700 btn-scale transition ml-1">
+                        <i class="fa-solid fa-check"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard Stats -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+                    <div class="text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest font-bold">Total Users</div>
+                    <div class="text-2xl font-extrabold text-slate-800 mt-2">{{ users.length }}</div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+                    <div class="text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest font-bold">Trial Active</div>
+                    <div class="text-2xl font-extrabold text-indigo-600 mt-2">{{ stats.trial }}</div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+                    <div class="text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest font-bold">Premium</div>
+                    <div class="text-2xl font-extrabold text-emerald-600 mt-2">{{ stats.active }}</div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
+                    <div class="text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest font-bold">Blocked / Exp.</div>
+                    <div class="text-2xl font-extrabold text-red-500 mt-2">{{ stats.blocked }}</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FILTER & SEARCH BAR -->
+        <section class="bg-white border border-slate-200 rounded-[28px] p-3 shadow-sm">
+            <div class="flex flex-col lg:flex-row gap-3">
+                
+                <!-- Tabs -->
+                <div class="flex overflow-x-auto gap-2 no-scrollbar flex-1">
+                    <button v-for="tab in tabs" :key="tab.id" @click="filter = tab.id"
+                        class="flex-1 min-w-[90px] rounded-xl py-3 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                        :class="filter === tab.id ? 'bg-brand text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800'">
+                        <i :class="tab.icon"></i> {{ tab.label }}
+                    </button>
+                </div>
+
+                <!-- Search & Sort -->
+                <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                    <div class="relative flex-1 lg:w-64">
+                        <i class="fa-solid fa-search absolute left-4 top-3.5 text-slate-400 text-sm"></i>
+                        <input type="text" v-model="searchQuery" placeholder="Search users..." class="input-box pl-10 text-sm py-3 rounded-xl border border-slate-200">
+                    </div>
+                    <select v-model="sortBy" class="input-box text-sm py-3 rounded-xl w-full sm:w-40 cursor-pointer appearance-none border border-slate-200 text-slate-600 font-bold">
+                        <option value="latest">Latest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="active_first">Premium First</option>
+                        <option value="expiring_soon">Expiring Soon</option>
+                        <option value="blocked_first">Blocked First</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- USERS CARD GRID (Crystal White Theme) -->
+        <section v-if="processedUsers.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            
+            <div v-for="user in processedUsers" :key="user.id" class="bg-white border border-slate-200 rounded-[28px] p-5 flex flex-col gap-5 transition-all hover:-translate-y-1 hover:shadow-xl hover:border-brand">
+                
+                <!-- User Header (Clickable for full details) -->
+                <div class="cursor-pointer flex items-center gap-4" @click="openUserDetails(user)">
+                    <div class="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center font-extrabold text-xl text-brand shrink-0">
+                        {{ user.email ? user.email.charAt(0).toUpperCase() : 'U' }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-slate-800 text-sm truncate">{{ user.name || 'Unknown User' }}</h3>
+                        <p class="text-xs text-slate-500 truncate mt-0.5">{{ user.email || 'No Email' }}</p>
+                        <div class="flex gap-2 mt-2">
+                            <span v-if="user.is_blocked" class="text-[9px] px-2 py-1 rounded-md bg-red-50 text-red-600 border border-red-100 font-bold uppercase tracking-wider">Blocked</span>
+                            <span v-else class="text-[9px] px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold uppercase tracking-wider">Active</span>
+                            <span class="text-[9px] px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-bold uppercase tracking-wider">{{ user.plan_status }}</span>
+                        </div>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 text-xs shrink-0 group-hover:bg-brand group-hover:text-white transition">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <!-- Time Left Section -->
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <span class="text-slate-400 text-[10px] font-bold uppercase tracking-widest block mb-1">Time Left</span>
+                        <span class="font-mono text-sm font-bold" :class="getExpiryColor(user)">
+                            <i class="fa-regular mr-1" :class="(getExpiryMs(user) && getExpiryMs(user) > Date.now()) ? 'fa-clock' : 'fa-circle-xmark'"></i>
+                            {{ getExpiryDate(user) }}
+                        </span>
+                    </div>
+                    <div v-if="isExpiringSoon(user)" class="text-[10px] text-amber-600 font-bold bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 flex items-center gap-1 shadow-sm">
+                        <i class="fa-solid fa-bolt"></i> Expiring Soon
+                    </div>
+                </div>
+
+                <!-- Action Buttons (Cumulative Logic remains same) -->
+                <div class="grid grid-cols-[1fr_1fr_2fr_auto] gap-2 mt-auto">
+                    <button @click="activateSubscription(user, 30)" class="bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-xl py-2.5 text-[11px] font-bold text-blue-600 transition btn-scale">
+                        +30D
+                    </button>
+                    <button @click="activateSubscription(user, 90)" class="bg-purple-50 hover:bg-purple-100 border border-purple-100 rounded-xl py-2.5 text-[11px] font-bold text-purple-600 transition btn-scale">
+                        +90D
+                    </button>
+                    
+                    <div class="flex items-center bg-slate-50 rounded-xl border border-slate-200 overflow-hidden focus-within:border-brand focus-within:ring-2 focus-within:ring-indigo-100 transition">
+                        <input type="number" v-model="user.addDays" placeholder="Days" class="w-full bg-transparent text-slate-700 text-center text-[11px] font-bold outline-none px-2">
+                        <button @click="activateSubscription(user, user.addDays)" class="bg-brand h-full px-3.5 text-white transition hover:bg-indigo-700 flex items-center justify-center text-[10px] btn-scale">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                    
+                    <button @click="toggleBlock(user)" class="bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl w-11 flex items-center justify-center transition btn-scale shadow-sm" :class="user.is_blocked ? 'text-emerald-500 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'text-slate-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50'">
+                        <i class="fa-solid" :class="user.is_blocked ? 'fa-unlock' : 'fa-lock'"></i>
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Empty State -->
+        <section v-if="processedUsers.length === 0 && !loading" class="bg-white border border-slate-200 rounded-[28px] p-16 text-center text-slate-400 shadow-sm">
+            <i class="fa-solid fa-ghost text-5xl mb-4 opacity-20 text-slate-300"></i>
+            <h3 class="text-lg font-bold text-slate-700 mb-1">No users found</h3>
+            <p class="text-sm">Try modifying your search or filters.</p>
+        </section>
+
+    </div>
+
+    <!-- POPUP MODAL: ALL USER DETAILS -->
+    <div v-if="selectedUser" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div class="bg-white rounded-[32px] p-6 md:p-8 max-w-lg w-full relative shadow-2xl flex flex-col max-h-[90vh]">
+            
+            <button @click="selectedUser = null" class="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 transition btn-scale z-10">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <!-- Header -->
+            <div class="flex flex-col items-center text-center pb-6 shrink-0 border-b border-slate-100">
+                <div class="w-20 h-20 rounded-[24px] bg-brand flex items-center justify-center text-white font-bold text-3xl shadow-lg shadow-indigo-200 mb-4">
+                    {{ selectedUser.email ? selectedUser.email.charAt(0).toUpperCase() : 'U' }}
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800">{{ selectedUser.name || 'Unknown Name' }}</h2>
+                <p class="text-slate-500 font-medium text-sm mt-1">{{ selectedUser.email }}</p>
+                <div class="mt-3">
+                    <span class="text-[10px] px-3 py-1 rounded-md bg-indigo-50 text-brand font-bold uppercase tracking-widest border border-indigo-100">{{ selectedUser.plan_status }} PLAN</span>
+                </div>
+            </div>
+
+            <!-- Scrollable All Details List -->
+            <div class="overflow-y-auto custom-scrollbar flex-1 -mx-2 px-2 py-4 space-y-2">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1">Database Records</div>
+                
+                <!-- Dynamic loop for ALL table columns (password, id, dates, etc.) -->
+                <div v-for="(val, key) in selectedUser" :key="key">
+                    <!-- Skip UI specific keys like addDays -->
+                    <div v-if="key !== 'addDays'" class="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-slate-50 rounded-xl border border-slate-100 gap-1 sm:gap-4">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0">{{ formatKey(key) }}</span>
+                        <span class="text-xs text-slate-800 font-semibold break-all text-left sm:text-right font-mono">{{ formatValue(key, val) }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100 shrink-0">
+                <button @click="selectedUser = null" class="w-full py-4 rounded-xl bg-slate-800 font-bold text-white hover:bg-slate-700 transition btn-scale shadow-lg shadow-slate-200">Close Details</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp } = Vue;
+    const { createClient } = supabase;
+
+    // --- CONFIGURATION ---
+    const SUPABASE_URL = "https://weunyluildqsgbsmmawi.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndldW55bHVpbGRxc2dic21tYXdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MTQ1MTAsImV4cCI6MjA4NTA5MDUxMH0.MpC1WcT120r59MPz_Bt8CBnXjTusajlu4OPmd_6KHkw";
+    const TABLE_NAME = "users"; 
+
+    createApp({
+        data() {
+            return {
+                sb: null,
+                users:[],
+                loading: false,
+                isConnected: false,
+                errorMsg: '',
+                filter: 'all',
+                searchQuery: '', 
+                sortBy: 'latest', 
+                selectedUser: null,
+                trialSettings: { days: 0, hours: 0 },
+                tabs:[
+                    { id: 'all', label: 'All Users', icon: 'fa-solid fa-layer-group' },
+                    { id: 'active', label: 'Premium', icon: 'fa-solid fa-gem' },
+                    { id: 'trial', label: 'Trial', icon: 'fa-solid fa-stopwatch' },
+                    { id: 'blocked', label: 'Blocked', icon: 'fa-solid fa-ban' }
+                ]
+            }
+        },
+        computed: {
+            stats() {
+                return {
+                    active: this.users.filter(u => u.plan_status === 'active' && !u.is_blocked).length,
+                    trial: this.users.filter(u => u.plan_status === 'trial' && !u.is_blocked).length,
+                    blocked: this.users.filter(u => u.is_blocked).length
+                }
+            },
+            processedUsers() {
+                let result = this.users;
+
+                if (this.filter === 'blocked') result = result.filter(u => u.is_blocked);
+                else if (this.filter === 'active') result = result.filter(u => !u.is_blocked && u.plan_status === 'active');
+                else if (this.filter === 'trial') result = result.filter(u => !u.is_blocked && u.plan_status === 'trial');
+
+                if (this.searchQuery && this.searchQuery.trim() !== '') {
+                    const q = this.searchQuery.toLowerCase().trim();
+                    result = result.filter(u => 
+                        (u.name && String(u.name).toLowerCase().includes(q)) || 
+                        (u.email && String(u.email).toLowerCase().includes(q)) ||
+                        (u.id && String(u.id).toLowerCase().includes(q)) ||
+                        (u.mobile && String(u.mobile).toLowerCase().includes(q))
+                    );
+                }
+
+                result.sort((a, b) => {
+                    if (this.sortBy === 'latest') return new Date(b.created_at) - new Date(a.created_at);
+                    if (this.sortBy === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
+                    
+                    if (this.sortBy === 'active_first') {
+                        let aActive = (!a.is_blocked && a.plan_status === 'active') ? 1 : 0;
+                        let bActive = (!b.is_blocked && b.plan_status === 'active') ? 1 : 0;
+                        return bActive - aActive; 
+                    }
+                    
+                    if (this.sortBy === 'blocked_first') {
+                        let aBlk = a.is_blocked ? 1 : 0;
+                        let bBlk = b.is_blocked ? 1 : 0;
+                        return bBlk - aBlk; 
+                    }
+
+                    if (this.sortBy === 'expiring_soon') {
+                        let aMs = this.getExpiryMs(a);
+                        let bMs = this.getExpiryMs(b);
+                        
+                        let aValid = (aMs && aMs > Date.now()) ? 1 : 0;
+                        let bValid = (bMs && bMs > Date.now()) ? 1 : 0;
+                        
+                        if (aValid !== bValid) return bValid - aValid;
+                        if (aValid && bValid) return aMs - bMs;
+                        return 0;
+                    }
+                    return 0;
+                });
+
+                return result;
+            }
+        },
+        mounted() {
+            this.sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+            this.fetchUsers();
+            this.fetchSettings();
+        },
+        methods: {
+            async fetchUsers() {
+                this.loading = true;
+                this.errorMsg = '';
+                const { data, error } = await this.sb
+                    .from(TABLE_NAME)
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    this.errorMsg = error.message;
+                    this.isConnected = false;
+                } else {
+                    this.isConnected = true;
+                    // Inject addDays property for UI mapping
+                    this.users = data.map(u => ({...u, addDays: '' }));
+                }
+                this.loading = false;
+            },
+
+            async fetchSettings() {
+                const { data } = await this.sb.from('app_settings').select('*').single();
+                if (data && data.trial_duration_minutes != null) {
+                    const totalMins = data.trial_duration_minutes;
+                    this.trialSettings.days = Math.floor(totalMins / (24 * 60));
+                    this.trialSettings.hours = Math.floor((totalMins % (24 * 60)) / 60);
+                }
+            },
+
+            async updateSettings() {
+                let d = parseInt(this.trialSettings.days) || 0;
+                let h = parseInt(this.trialSettings.hours) || 0;
+                let totalMins = (d * 24 * 60) + (h * 60);
+                
+                const { error } = await this.sb.from('app_settings').update({ trial_duration_minutes: totalMins }).eq('id', 1);
+                if(error) alert(error.message);
+                else alert(`Trial default saved: ${d} Days and ${h} Hours.`);
+            },
+
+            // --- CUMULATIVE SUBSCRIPTION LOGIC ---
+            async activateSubscription(user, daysAmount) {
+                const daysToAdd = parseInt(daysAmount);
+                if (!daysToAdd || isNaN(daysToAdd)) {
+                    alert("Please enter a valid number of days.");
+                    return;
+                }
+                
+                let baselineDate = new Date(); // default to NOW
+                
+                // If user is currently ACTIVE and hasn't expired, extend from existing expiry date
+                if (user.plan_status === 'active' && user.subscription_end_at) {
+                    const currentExpiry = new Date(user.subscription_end_at);
+                    if (currentExpiry > baselineDate) {
+                        baselineDate = currentExpiry; // Extend from future expiry
+                    }
+                }
+
+                // Add requested days
+                baselineDate.setDate(baselineDate.getDate() + daysToAdd);
+                const newExpiryIso = baselineDate.toISOString();
+
+                const { error } = await this.sb.from(TABLE_NAME).update({
+                    is_blocked: false,
+                    plan_status: 'active',
+                    subscription_end_at: newExpiryIso,
+                    trial_end_at: null
+                }).eq('id', user.id);
+
+                if (error) {
+                    alert("Error: " + error.message);
+                } else {
+                    // Update Local State instantly
+                    user.is_blocked = false;
+                    user.plan_status = 'active';
+                    user.subscription_end_at = newExpiryIso;
+                    user.trial_end_at = null;
+                    user.addDays = ''; 
+                }
+            },
+
+            async toggleBlock(user) {
+                const newState = !user.is_blocked;
+                const updates = { is_blocked: newState };
+                if (newState) updates.plan_status = 'expired';
+
+                const { error } = await this.sb.from(TABLE_NAME).update(updates).eq('id', user.id);
+                
+                if (error) alert(error.message);
+                else {
+                     user.is_blocked = newState;
+                     if(newState) user.plan_status = 'expired';
+                }
+            },
+
+            openUserDetails(user) {
+                this.selectedUser = user;
+            },
+
+            formatKey(key) {
+                return key.replace(/_/g, ' ');
+            },
+            
+            formatValue(key, val) {
+                if (val === null || val === '') return 'N/A';
+                if (typeof val === 'boolean') return val ? 'TRUE / YES' : 'FALSE / NO';
+                if (key.includes('_at') || key.includes('date')) {
+                    const d = new Date(val);
+                    if(!isNaN(d)) return d.toLocaleString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+                }
+                return val;
+            },
+
+            getExpiryMs(user) {
+                if (user.is_blocked || user.plan_status === 'expired') return null;
+                const dStr = user.plan_status === 'active' ? user.subscription_end_at : user.trial_end_at;
+                return dStr ? new Date(dStr).getTime() : null;
+            },
+
+            getExpiryDate(user) {
+                if (user.is_blocked) return 'Blocked';
+                if (user.plan_status === 'expired') return 'Expired';
+                
+                const dStr = user.plan_status === 'active' ? user.subscription_end_at : user.trial_end_at;
+                if (!dStr) return '--';
+                
+                return new Date(dStr).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+            },
+
+            isExpiringSoon(user) {
+                const ms = this.getExpiryMs(user);
+                if (!ms) return false;
+                const daysLeft = (ms - Date.now()) / (1000 * 60 * 60 * 24);
+                return (daysLeft > 0 && daysLeft <= 3); 
+            },
+            
+            getExpiryColor(user) {
+                if (user.is_blocked || user.plan_status === 'expired') return 'text-slate-500';
+                const ms = this.getExpiryMs(user);
+                if (!ms) return 'text-slate-500';
+                
+                const daysLeft = (ms - Date.now()) / (1000 * 60 * 60 * 24);
+                if (daysLeft < 0) return 'text-red-500';
+                if (daysLeft <= 3) return 'text-amber-500';
+                return 'text-emerald-600';
+            }
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
